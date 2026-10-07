@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Enterprise ITSM AI Assistant</title>
+  
+  <!-- External CSS -->
+  <link rel="stylesheet" href="style.css" />
+  
+  <!-- Markdown Parser -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-title-wrapper">
+      <span class="header-icon">🤖</span>
+      <div>
+        <h1 class="header-title">Enterprise ITSM Assistant</h1>
+      </div>
+    </div>
+
+    <div class="token-wrapper">
+      <label for="token" class="token-label">Auth Token:</label>
+      <input type="text" id="token" value="test_token_123" class="token-input" />
+    </div>
+  </header>
+
+  
+
+  <!-- Messages Container -->
+  <main id="chat-box" class="chat-container">
+    <div class="message-row">
+      <div class="avatar">AI</div>
+      <div class="bubble ai">
+        Hello! I'm your Enterprise ITSM AI Assistant. How can I help you today? You can ask me to list pending tasks, query incidents, or check service requests.
+      </div>
+    </div>
+  </main>
+
+  <div class="quick-prompts-bar">
+    <button type="button" onclick="sendQuickPrompt('Show all my pending work')" class="quick-btn">
+      📌 Show pending work
+    </button>
+    <button type="button" onclick="sendQuickPrompt('Show me all incidents')" class="quick-btn">
+      🚨 Show all incidents
+    </button>
+    <button type="button" onclick="sendQuickPrompt('Show all my requests')" class="quick-btn">
+      📋 Show all requests
+    </button>
+    <button type="button" onclick="sendQuickPrompt('What is the status of INC10237?')" class="quick-btn">
+      🔍 Check INC10237
+    </button>
+  </div>
+
+  <!-- Input Box Footer -->
+  <footer class="chat-footer">
+    <div class="input-wrapper">
+      <input 
+        type="text" 
+        id="user-input" 
+        placeholder="Ask about incidents, requests, or pending work..." 
+        class="chat-input" 
+        autocomplete="off"
+        onkeydown="handleKey(event)" 
+      />
+      <button type="button" onclick="sendMessage()" id="send-btn" class="send-btn">
+        <span>Send</span>
+        <span>➤</span>
+      </button>
+    </div>
+  </footer>
+
+  <!-- Chat Script -->
+  <script>
+    // Configurable endpoint (Change port if needed: 8001 or 9000)
+    const API_URL = "http://localhost:8001/api/v1/chat";
+    const threadId = "session_" + Math.random().toString(36).substring(7);
+
+    function appendMessage(sender, text) {
+      const chatBox = document.getElementById("chat-box");
+      const isUser = sender === "user";
+
+      const wrapper = document.createElement("div");
+      wrapper.className = `message-row ${isUser ? "user" : ""}`;
+
+      if (isUser) {
+        wrapper.innerHTML = `
+          <div class="bubble user">
+            ${escapeHtml(text)}
+          </div>
+        `;
+      } else {
+        const parsedHTML = (typeof marked !== "undefined") ? marked.parse(text) : text;
+        wrapper.innerHTML = `
+          <div class="avatar">AI</div>
+          <div class="bubble ai markdown-content">
+            ${parsedHTML}
+          </div>
+        `;
+      }
+
+      chatBox.appendChild(wrapper);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function appendTypingIndicator() {
+      const chatBox = document.getElementById("chat-box");
+      const indicator = document.createElement("div");
+      indicator.id = "typing-indicator";
+      indicator.className = "message-row";
+      indicator.innerHTML = `
+        <div class="avatar">AI</div>
+        <div class="bubble ai">
+          <div class="typing-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
+      `;
+      chatBox.appendChild(indicator);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function removeTypingIndicator() {
+      const indicator = document.getElementById("typing-indicator");
+      if (indicator) indicator.remove();
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.innerText = text;
+      return div.innerHTML;
+    }
+
+    function handleKey(event) {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+      }
+    }
+
+    async function sendMessage() {
+      const inputField = document.getElementById("user-input");
+      const tokenField = document.getElementById("token");
+      const sendBtn = document.getElementById("send-btn");
+
+      const message = inputField.value.trim();
+      const token = tokenField.value.trim();
+
+      if (!message) return;
+
+      appendMessage("user", message);
+      inputField.value = "";
+      inputField.disabled = true;
+      sendBtn.disabled = true;
+      appendTypingIndicator();
+
+      try {
+        const response = await fetch(API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            message: message,
+            thread_id: threadId
+          })
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => null);
+          const detail = errData?.detail || `HTTP ${response.status} ${response.statusText}`;
+          throw new Error(detail);
+        }
+
+        const data = await response.json();
+        removeTypingIndicator();
+
+        // Support various API response keys (reply, response, message, content)
+        const botText = data.reply || data.response || data.message || data.content || JSON.stringify(data);
+        appendMessage("ai", botText);
+
+      } catch (err) {
+        removeTypingIndicator();
+        appendMessage(
+          "ai",
+          `❌ **Connection Error:**\n\nCould not reach the Chatbot API at \`${API_URL}\`.\n\n*Details: ${err.message}*`
+        );
+      } finally {
+        inputField.disabled = false;
+        sendBtn.disabled = false;
+        inputField.focus();
+      }
+    }
+
+    function sendQuickPrompt(promptText) {
+      document.getElementById("user-input").value = promptText;
+      sendMessage();
+    }
+  </script>
+</body>
+</html>
