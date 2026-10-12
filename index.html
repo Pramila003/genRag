@@ -3,83 +3,205 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Enterprise ITSM AI Assistant</title>
+  <title>ITSM AI Assistant</title>
   
-  <!-- External CSS -->
   <link rel="stylesheet" href="style.css" />
-  
-  <!-- Markdown Parser -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
 
-  <!-- Header -->
-  <header class="header">
-    <div class="header-title-wrapper">
-      <span class="header-icon">🤖</span>
-      <div>
-        <h1 class="header-title">Enterprise ITSM Assistant</h1>
+  <div class="app-layout">
+    
+    <!-- ==========================================
+         LEFT SIDEBAR: Chat History
+         ========================================== -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <button onclick="createNewThread()" class="new-chat-btn">
+          <span>➕</span>
+          <span>New Chat</span>
+        </button>
       </div>
-    </div>
 
-    <div class="token-wrapper">
-      <label for="token" class="token-label">Auth Token:</label>
-      <input type="text" id="token" value="test_token_123" class="token-input" />
-    </div>
-  </header>
-
-  
-
-  <!-- Messages Container -->
-  <main id="chat-box" class="chat-container">
-    <div class="message-row">
-      <div class="avatar">AI</div>
-      <div class="bubble ai">
-        Hello! I'm your Enterprise ITSM AI Assistant. How can I help you today? You can ask me to list pending tasks, query incidents, or check service requests.
+      <!-- List of Past Conversations -->
+      <div id="threads-container" class="threads-container">
+        <!-- Injected via JavaScript -->
       </div>
-    </div>
-  </main>
+    </aside>
 
-  <div class="quick-prompts-bar">
-    <button type="button" onclick="sendQuickPrompt('Show all my pending work')" class="quick-btn">
-      📌 Show pending work
-    </button>
-    <button type="button" onclick="sendQuickPrompt('Show me all incidents')" class="quick-btn">
-      🚨 Show all incidents
-    </button>
-    <button type="button" onclick="sendQuickPrompt('Show all my requests')" class="quick-btn">
-      📋 Show all requests
-    </button>
-    <button type="button" onclick="sendQuickPrompt('What is the status of INC10237?')" class="quick-btn">
-      🔍 Check INC10237
-    </button>
+    <!-- ==========================================
+         RIGHT SIDE: Active Conversation View
+         ========================================== -->
+    <div class="main-chat-area">
+      
+      <!-- Header -->
+      <header class="header">
+        <div class="header-title-wrapper">
+          <span class="header-icon">🤖</span>
+          <h1 class="header-title">Enterprise ITSM Assistant</h1>
+        </div>
+
+        <div class="token-wrapper">
+          <label for="token" class="token-label">Token:</label>
+          <input type="text" id="token" value="test_token_123" class="token-input" />
+        </div>
+      </header>
+
+      <!-- Quick Action Prompts -->
+      <div class="quick-prompts-bar">
+        <button onclick="sendQuickPrompt('Show all my pending work')" class="quick-btn">
+          📌 Show pending work
+        </button>
+        <button onclick="sendQuickPrompt('Show me all incidents')" class="quick-btn">
+          🚨 Show all incidents
+        </button>
+        <button onclick="sendQuickPrompt('Show all my requests')" class="quick-btn">
+          📋 Show all requests
+        </button>
+        <button onclick="sendQuickPrompt('What is the status of INC10237?')" class="quick-btn">
+          🔍 Check INC10237
+        </button>
+      </div>
+
+      <!-- Messages Stream -->
+      <main id="chat-box" class="chat-container">
+        <!-- Messages rendered dynamically -->
+      </main>
+
+      <!-- Input Footer -->
+      <footer class="chat-footer">
+        <div class="input-wrapper">
+          <input type="text" id="user-input" placeholder="Ask about incidents, requests, or pending work..."
+                 class="chat-input" onkeydown="if(event.key === 'Enter') sendMessage()" />
+          <button onclick="sendMessage()" id="send-btn" class="send-btn">
+            <span>Send</span>
+            <span>➤</span>
+          </button>
+        </div>
+      </footer>
+
+    </div>
   </div>
 
-  <!-- Input Box Footer -->
-  <footer class="chat-footer">
-    <div class="input-wrapper">
-      <input 
-        type="text" 
-        id="user-input" 
-        placeholder="Ask about incidents, requests, or pending work..." 
-        class="chat-input" 
-        autocomplete="off"
-        onkeydown="handleKey(event)" 
-      />
-      <button type="button" onclick="sendMessage()" id="send-btn" class="send-btn">
-        <span>Send</span>
-        <span>➤</span>
-      </button>
-    </div>
-  </footer>
-
-  <!-- Chat Script -->
+  <!-- Multi-Thread Management Script -->
   <script>
-    // Configurable endpoint (Change port if needed: 8001 or 9000)
     const API_URL = "http://localhost:8001/api/v1/chat";
-    const threadId = "session_" + Math.random().toString(36).substring(7);
+    const STORAGE_KEY = "itsm_chat_sessions_v1";
+    const ACTIVE_KEY = "itsm_active_thread_id";
 
-    function appendMessage(sender, text) {
+    // 1. Data Store: { [threadId]: { id, title, messages: [{sender, text}] } }
+    let threads = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    let activeThreadId = localStorage.getItem(ACTIVE_KEY) || null;
+
+    // Default welcome prompt
+    const defaultWelcome = {
+      sender: "ai",
+      text: "Hello! I'm your Enterprise ITSM AI Assistant. How can I help you today? You can check incident status, query requests, or review pending tasks."
+    };
+
+    // 2. Initialize App
+    function init() {
+      const threadIds = Object.keys(threads);
+      if (threadIds.length === 0) {
+        createNewThread(false);
+      } else {
+        if (!activeThreadId || !threads[activeThreadId]) {
+          activeThreadId = threadIds[0];
+          localStorage.setItem(ACTIVE_KEY, activeThreadId);
+        }
+        renderSidebar();
+        renderActiveChat();
+      }
+    }
+
+    // 3. Create a Brand New Chat
+    function createNewThread(shouldFocus = true) {
+      const id = "thread_" + Math.random().toString(36).substring(2, 9);
+      threads[id] = {
+        id: id,
+        title: "New Conversation",
+        messages: [ { ...defaultWelcome } ]
+      };
+      activeThreadId = id;
+      saveState();
+      renderSidebar();
+      renderActiveChat();
+      if (shouldFocus) document.getElementById("user-input").focus();
+    }
+
+    // 4. Switch Between Conversations
+    function switchThread(id) {
+      if (activeThreadId === id) return;
+      activeThreadId = id;
+      localStorage.setItem(ACTIVE_KEY, activeThreadId);
+      renderSidebar();
+      renderActiveChat();
+    }
+
+    // 5. Delete an Old Thread
+    function deleteThread(event, id) {
+      event.stopPropagation();
+      delete threads[id];
+      const remainingIds = Object.keys(threads);
+      if (remainingIds.length === 0) {
+        createNewThread(false);
+      } else {
+        if (activeThreadId === id) {
+          activeThreadId = remainingIds[0];
+          localStorage.setItem(ACTIVE_KEY, activeThreadId);
+        }
+        saveState();
+        renderSidebar();
+        renderActiveChat();
+      }
+    }
+
+    // 6. Save State in LocalStorage
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(threads));
+      localStorage.setItem(ACTIVE_KEY, activeThreadId);
+    }
+
+    // 7. Render Left Sidebar
+    function renderSidebar() {
+      const container = document.getElementById("threads-container");
+      container.innerHTML = "";
+
+      const threadIds = Object.keys(threads);
+      // Show newest threads at top
+      threadIds.reverse().forEach(id => {
+        const item = threads[id];
+        const isActive = id === activeThreadId;
+
+        const row = document.createElement("div");
+        row.className = `thread-item ${isActive ? "active" : ""}`;
+        row.onclick = () => switchThread(id);
+
+        row.innerHTML = `
+          <span class="thread-title">💬 ${item.title}</span>
+          <button class="delete-thread-btn" title="Delete conversation" onclick="deleteThread(event, '${id}')">✕</button>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    // 8. Render Messages for the Active Chat
+    function renderActiveChat() {
+      const chatBox = document.getElementById("chat-box");
+      chatBox.innerHTML = "";
+
+      const currentThread = threads[activeThreadId];
+      if (!currentThread) return;
+
+      currentThread.messages.forEach(msg => {
+        appendMessageUI(msg.sender, msg.text, false);
+      });
+
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    // 9. Append Message to UI
+    function appendMessageUI(sender, text, shouldScroll = true) {
       const chatBox = document.getElementById("chat-box");
       const isUser = sender === "user";
 
@@ -89,11 +211,11 @@
       if (isUser) {
         wrapper.innerHTML = `
           <div class="bubble user">
-            ${escapeHtml(text)}
+            ${text}
           </div>
         `;
       } else {
-        const parsedHTML = (typeof marked !== "undefined") ? marked.parse(text) : text;
+        const parsedHTML = marked.parse(text);
         wrapper.innerHTML = `
           <div class="avatar">AI</div>
           <div class="bubble ai markdown-content">
@@ -103,10 +225,11 @@
       }
 
       chatBox.appendChild(wrapper);
-      chatBox.scrollTop = chatBox.scrollHeight;
+      if (shouldScroll) chatBox.scrollTop = chatBox.scrollHeight;
     }
 
-    function appendTypingIndicator() {
+    // 10. Typing Indicator
+    function showTypingIndicator() {
       const chatBox = document.getElementById("chat-box");
       const indicator = document.createElement("div");
       indicator.id = "typing-indicator";
@@ -126,38 +249,36 @@
     }
 
     function removeTypingIndicator() {
-      const indicator = document.getElementById("typing-indicator");
-      if (indicator) indicator.remove();
+      const el = document.getElementById("typing-indicator");
+      if (el) el.remove();
     }
 
-    function escapeHtml(text) {
-      const div = document.createElement("div");
-      div.innerText = text;
-      return div.innerHTML;
-    }
-
-    function handleKey(event) {
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        sendMessage();
-      }
-    }
-
+    // 11. Send Message to Chatbot API
     async function sendMessage() {
-      const inputField = document.getElementById("user-input");
-      const tokenField = document.getElementById("token");
+      const input = document.getElementById("user-input");
+      const token = document.getElementById("token").value.trim();
       const sendBtn = document.getElementById("send-btn");
+      const text = input.value.trim();
 
-      const message = inputField.value.trim();
-      const token = tokenField.value.trim();
+      if (!text) return;
 
-      if (!message) return;
+      const currentThread = threads[activeThreadId];
 
-      appendMessage("user", message);
-      inputField.value = "";
-      inputField.disabled = true;
+      // Auto-name the thread based on first user query
+      if (currentThread.messages.length <= 1) {
+        currentThread.title = text.length > 22 ? text.substring(0, 22) + "..." : text;
+        renderSidebar();
+      }
+
+      // Add User Message to History & UI
+      currentThread.messages.push({ sender: "user", text: text });
+      saveState();
+      appendMessageUI("user", text);
+
+      input.value = "";
+      input.disabled = true;
       sendBtn.disabled = true;
-      appendTypingIndicator();
+      showTypingIndicator();
 
       try {
         const response = await fetch(API_URL, {
@@ -167,34 +288,33 @@
             "Authorization": `Bearer ${token}`
           },
           body: JSON.stringify({
-            message: message,
-            thread_id: threadId
+            message: text,
+            thread_id: activeThreadId  // <--- Passed to LangGraph Checkpointer
           })
         });
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => null);
-          const detail = errData?.detail || `HTTP ${response.status} ${response.statusText}`;
-          throw new Error(detail);
-        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const data = await response.json();
         removeTypingIndicator();
 
-        // Support various API response keys (reply, response, message, content)
-        const botText = data.reply || data.response || data.message || data.content || JSON.stringify(data);
-        appendMessage("ai", botText);
+        const reply = data.response || "No response received.";
+        
+        // Add AI Response to History & UI
+        currentThread.messages.push({ sender: "ai", text: reply });
+        saveState();
+        appendMessageUI("ai", reply);
 
       } catch (err) {
         removeTypingIndicator();
-        appendMessage(
-          "ai",
-          `❌ **Connection Error:**\n\nCould not reach the Chatbot API at \`${API_URL}\`.\n\n*Details: ${err.message}*`
-        );
+        const errText = `❌ **Error:** Unable to reach API at \`${API_URL}\` (${err.message})`;
+        currentThread.messages.push({ sender: "ai", text: errText });
+        saveState();
+        appendMessageUI("ai", errText);
       } finally {
-        inputField.disabled = false;
+        input.disabled = false;
         sendBtn.disabled = false;
-        inputField.focus();
+        input.focus();
       }
     }
 
@@ -202,6 +322,9 @@
       document.getElementById("user-input").value = promptText;
       sendMessage();
     }
+
+    // Start on page load
+    window.onload = init;
   </script>
 </body>
 </html>

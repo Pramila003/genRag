@@ -28,11 +28,11 @@ class ITSMClient:
             return response.json()
 
     async def get_all_incidents(self, auth_token: str)-> Dict:
-            """Calls GET /api/v1/me/incidents on the ITSM Backend."""
+            """Calls the backend to get the information for all the incident."""
             headers = {"Authorization": f"Bearer {auth_token}"}
             async with httpx.AsyncClient(timeout=10.0) as client:
                 res = await client.get(
-                    f"{self.base_url}/me/incidents",
+                    f"{self.base_url}/me/incident",
                     headers=headers
                 )
                 if res.status_code == 404:
@@ -57,12 +57,13 @@ class ITSMClient:
             return res.json()
         
     async def get_request_by_number(self, request_number: str, auth_token: str) -> Optional[Dict[str, Any]]:
-        """Calls the backend to get details for one specific request."""
+        """Calls the backend to get the information for the particular request."""
         headers = {"Authorization": f"Bearer {auth_token}"}
         async with httpx.AsyncClient(timeout=10.0) as client:
             res = await client.get(
                 f"{self.base_url}/requests/{request_number.upper()}",
                 headers=headers
+                
             )
             if res.status_code == 404:
                 return None

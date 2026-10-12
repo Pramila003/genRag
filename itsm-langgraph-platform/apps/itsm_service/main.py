@@ -76,7 +76,7 @@ async def get_incident(
     return incident
 
 
-@app.get("/api/v1/me/incidents")
+@app.get("/api/v1/me/incident")
 async def get_my_all_incident(auth_ctx: dict = Depends(get_current_user_and_tenant)):
         tenant_id = auth_ctx["tenant_id"]
         user_id = auth_ctx["user_id"]

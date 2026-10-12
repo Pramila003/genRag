@@ -5,13 +5,14 @@ from apps.chatbot_service.integrations.itsm_client import ITSMClient
 @tool
 async def get_incident(incident_number: str, config: RunnableConfig) -> str:
     """
-    Fetch active/live details of an IT incident by its number (e.g., 'INC10234').
-    Use this tool whenever a user asks about the status, priority, description, or updates on an incident.
+    Fetch active/live details of an IT incident by its number .
+    Use this tool whenever a user asks about on an  particular incident.
 
     Args:
         incident_number: Unique ID of the incident (e.g. 'INC10234').
     """
     # 1. Retrieve the JWT injected into LangGraph's config
+    print("[tool calling]: get particular incident")
     auth_token = config.get("configurable", {}).get("user_token")
     if not auth_token:
         return "Error: Missing authentication token. Please log in."
@@ -49,18 +50,17 @@ async def get_incident(incident_number: str, config: RunnableConfig) -> str:
         return f"Failed to retrieve incident {incident_number}: {str(e)}"
 
 
-@tool
+@tool("get_all_incidents")
 async def get_my_incident(config: RunnableConfig) -> str:
     """
     Fetch all IT service incidents (tickets) submitted/created by the current user.
     Use this tool when the user asks:
     - "Show all my incidents"
     - "What tickets did I open?"
-    - "Show my pending incidents"
-
-    Args:
-        status: (Optional) Filter requests by status like 'In Progress', 'Pending Approval', 'Completed', or None for all.
+    -"show my pending incident"
+    -"give me all incident"
     """
+
     print("\n🚨 [TOOL CALLED]: get_my_incidents")
     auth_token = config.get("configurable", {}).get("user_token")
     if not auth_token:
@@ -68,8 +68,14 @@ async def get_my_incident(config: RunnableConfig) -> str:
 
     client = ITSMClient()
     try:
-        data = await client.get_my_incidents(auth_token=auth_token)
-        incidents = data.get("incidents", [])
+        data = await client.get_all_incidents(auth_token=auth_token)
+        if not data:
+            return "No incidents found."
+
+        incidents = data.get("incidents", []) if isinstance(data, dict) else data
+
+        if not incidents:
+            return "You have no active or submitted incidents."
         
       
         # Format clean list for the LLM

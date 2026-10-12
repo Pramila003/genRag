@@ -50,6 +50,7 @@ async def get_request(request_number: str, config: RunnableConfig) -> str:
     """
     Fetch full details of a specific service request by its request number (e.g., 'REQ1001', 'REQ1002').
     Use this tool whenever the user asks about a specific request ticket number.
+    show ticket number 
 
     Args:
         request_number: The unique ID of the request (e.g. 'REQ1001').

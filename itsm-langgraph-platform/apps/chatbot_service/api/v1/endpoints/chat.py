@@ -31,4 +31,5 @@ async def chat_endpoint(
         config=config
     )
 
-    return {"response": result["messages"][-1].content}
+    final_reply = result["messages"][-1].content
+    return {"response": final_reply}
