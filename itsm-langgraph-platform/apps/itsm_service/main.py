@@ -142,9 +142,6 @@ async def get_single_request_endpoint(
 
 
 
-
-
-
 @app.get("/api/v1/me/pending-items")
 async def get_my_pending_items_endpoint(
     auth_ctx: dict = Depends(get_current_user_and_tenant)
